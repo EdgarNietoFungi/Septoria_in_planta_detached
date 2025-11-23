@@ -183,6 +183,7 @@ cld_output.model.1.2 <- flextable::flextable(cld_output.model.1)
 emm_log_scale.2 <- emmeans(model1.GLM, ~ fungusID)
 
 
+
 # Get EMMs on the original response (count) scale
 emm_response_scale.2 <- emmeans(model1.GLM, ~ fungusID, type = "response")
 #emmeans(model1.GLM, specs = ~ media * condition)
