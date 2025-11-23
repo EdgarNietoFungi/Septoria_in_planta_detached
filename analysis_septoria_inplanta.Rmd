@@ -1,0 +1,321 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+  word_document: default
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(tidyverse)
+library(broom)
+library(ezec)
+library(DescTools)
+library(rstatix)
+#library(ggpubr)
+library(agricolae)
+library(multcompView)
+library(ggpubr)
+library(dunn.test)
+library(cmstatr)
+library(flextable)
+library(dunn.test)
+#library(read)
+library(emmeans)
+library(officer)
+#library(plyr)
+library(MASS)
+library(multcomp)
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+```{r, reading_data, echo=TRUE}
+septoria.in.planta <- read_csv("data/Septoria_for_analysis_2025_DATA_READY.csv") 
+```
+
+```{r, checking experimental replications VISUALIZATION, echo=TRUE}
+septoria.in.planta.2 <- septoria.in.planta %>% dplyr::mutate(
+  plant_variety = factor(plant_variety),
+  fungusID = factor(fungusID),
+  condition = factor(condition),
+  experimental_replication = factor(experimental_replication),
+  EVALUATION = factor(EVALUATION)
+)
+
+#cecking bbetween experimnetal replications
+  A <- ggplot(data = septoria.in.planta.2 %>% dplyr::filter(condition=="inplanta"),
+       aes(x = plant_variety, y = DS,color =EVALUATION)) +  geom_boxplot()+ geom_point(na.rm = TRUE) +facet_wrap(~ experimental_replication)
+A
+
+
+B <- ggplot(data = septoria.in.planta.2 %>% dplyr::filter(condition=="detached_leaves"),
+       aes(x = plant_variety, y = DS,color =EVALUATION)) +  geom_boxplot()+ geom_point(na.rm = TRUE) +facet_wrap(~ experimental_replication)
+B
+
+```
+
+```{r,ANOVAecho=TRUE}
+
+# septoria.in.planta.3 <- septoria.in.planta.2 %>% dplyr::filter(!(condition=="inplanta" & EVALUATION == "7DAI")) %>% 
+  # dplyr::filter(!(condition=="inplanta" & EVALUATION == "14DAI"))
+  
+
+model1 <- aov(septoria.in.planta.2$DS ~ septoria.in.planta.2$plant_variety * septoria.in.planta.2$fungusID* septoria.in.planta.2$condition*septoria.in.planta.2$EVALUATION,  septoria.in.planta.2)
+summary.aov(model1)
+
+#significance in level separately plant variety, and condition, and evaluation.  
+#Significance interaction in plant variety*condition, plant variety*evaluation, condition*evaluation. 
+
+#No normal distrubtion
+residuals1 <- residuals(model1)
+residuals1
+shapiro.test(residuals1)
+
+LeveneTest(septoria.in.planta.2$DS ~ septoria.in.planta.2$plant_variety * septoria.in.planta.2$fungusID * septoria.in.planta.2$condition *septoria.in.planta.2$EVALUATION,  septoria.in.planta.2)
+
+
+model <-aov(DS ~ plant_variety * fungusID*condition*EVALUATION, data = septoria.in.planta.2)
+summary(model )
+
+#tukey_results_model <- TukeyHSD(model) PLANTVARIETY*fungusID
+interaction_emm1 <- emmeans(model, pairwise ~ plant_variety * fungusID, adjust = "tukey")
+# using the results from the emmeans object
+cld1 <- cld(interaction_emm1, 
+                   alpha = 0.05, 
+                   Letters = letters, # Use lowercase letters
+                   adjust = "tukey",sort = TRUE,reversed = T)
+
+# View the results
+summary(interaction_emm1)
+cld1.2 <- flextable::flextable(cld1)
+# flextable::save_as_docx(cld_output.model.1.2, path = "pairwise_least_squares_means_plant_variety* condition_tukey.docx")
+
+#tukey_results_model <- TukeyHSD(model) PLANTVARIETY*condtion
+interaction_emm2<- emmeans(model, pairwise ~ plant_variety * condition, adjust = "tukey")
+# using the results from the emmeans object
+cld2 <- cld(interaction_emm2, 
+                   alpha = 0.05, 
+                   Letters = letters, # Use lowercase letters
+                   adjust = "tukey",sort = TRUE,reversed = T)
+
+# View the results
+summary(interaction_emm2)
+cld2.2 <- flextable::flextable(cld2)
+# flextable::save_as_docx(cld_output.model.1.2, path = "pairwise_least_squares_means_plant_variety* condition_tukey.docx")
+#tukey_results_model <- TukeyHSD(model) PLANTVARIETY*evaluation
+interaction_emm3 <- emmeans(model, pairwise ~ plant_variety * EVALUATION, adjust = "tukey")
+# using the results from the emmeans object
+cld3 <- cld(interaction_emm3, 
+                   alpha = 0.05, 
+                   Letters = letters, # Use lowercase letters
+                   adjust = "tukey",sort = TRUE,reversed = T)
+
+# View the results
+summary(interaction_emm3)
+cld3.2 <- flextable::flextable(cld3)
+# flextable::save_as_docx(cld_output.model.1.2, path = "pairwise_least_squares_means_plant_variety* condition_tukey.docx")
+
+
+```
+
+```{r fitting GLM model, echo=TRUE, results="hide"}
+#### Fitting GLM the model
+
+model1.GLM <- glm(DS ~ plant_variety * fungusID* condition* EVALUATION, family = negative.binomial(theta = 1), data = septoria.in.planta.2)
+#Checking deviance residauls
+qqnorm(residuals(model1.GLM, type = "deviance"))
+qqline(residuals(model1.GLM, type = "deviance"), col = "red")
+
+#Checking Overdispersion
+
+# Check for overdispersion
+# A ratio much greater than 1 suggests overdispersion, no overdisperosion
+print(model1.GLM$deviance / model1.GLM$df.residual) 
+
+
+anova_model1.GLM <- aov(DS ~ plant_variety * fungusID* condition* EVALUATION, data = septoria.in.planta.2)
+summary(anova_model1.GLM)
+# Perform Tukey's HSD test
+#tukey_results <- TukeyHSD(anova_model1.GLM)
+# Print the results
+#print(tukey_results)
+
+
+####mian effecr plant variety 
+# Get EMMs on the default log scale
+emm_log_scale1 <- emmeans(model1.GLM, ~ plant_variety)
+
+
+# Get EMMs on the original response (count) scale
+emm_response_scale.1 <- emmeans(model1.GLM, ~ plant_variety, type = "response")
+#emmeans(model1.GLM, specs = ~ media * condition)
+#Snippe5
+cld_output.model.1 <- cld(emm_response_scale.1, Letters = LETTERS, alpha = 0.05, 
+                  adjust = "Tukey", # Adjust p-values (Tukey is default for pairwise)
+                  # Use capital letters
+                  sort = TRUE,reversed = T)
+summary(cld_output.model.1)
+print(cld_output.model.1)
+
+cld_output.model.1.2 <- flextable::flextable(cld_output.model.1)
+# flextable::save_as_docx(cld_output.model.1.2, path = "pairwise_least_squares_means_plant_variety* condition_tukey.docx")
+
+
+```
+
+
+
+```{r, mian effect 1, echo=TRUE}
+####mian effecr fungus ID 
+
+# Get EMMs on the default log scale
+emm_log_scale.2 <- emmeans(model1.GLM, ~ fungusID)
+
+
+# Get EMMs on the original response (count) scale
+emm_response_scale.2 <- emmeans(model1.GLM, ~ fungusID, type = "response")
+#emmeans(model1.GLM, specs = ~ media * condition)
+#Snippe5
+cld_output.model.2 <- cld(emm_response_scale.2, Letters = LETTERS, alpha = 0.05, 
+                  adjust = "Tukey", # Adjust p-values (Tukey is default for pairwise)
+                  # Use capital letters
+                  sort = TRUE,reversed = T)
+summary(cld_output.model.2)
+print(cld_output.model.2)
+
+cld_output.model.2.2 <- flextable::flextable(cld_output.model.2)
+# flextable::save_as_docx(cld_output.model.1.2, path = "pairwise_least_squares_means_plant_variety* condition_tukey.docx")
+
+```
+
+```{rmian effect 2, echo=TRUE}
+####mian effecr CONDITION
+
+# Get EMMs on the default log scale
+emm_log_scale.3 <- emmeans(model1.GLM, ~ condition)
+
+
+# Get EMMs on the original response (count) scale
+emm_response_scale.3 <- emmeans(model1.GLM, ~ condition, type = "response")
+#emmeans(model1.GLM, specs = ~ media * condition)
+#Snippe5
+cld_output.model.3 <- cld(emm_response_scale.3, Letters = LETTERS, alpha = 0.05, 
+                  adjust = "Tukey", # Adjust p-values (Tukey is default for pairwise)
+                  # Use capital letters
+                  sort = TRUE,reversed = T)
+summary(cld_output.model.3)
+print(cld_output.model.3)
+
+cld_output.model.3.2 <- flextable::flextable(cld_output.model.3)
+# flextable::save_as_docx(cld_output.model.1.2, path = "pairwise_least_squares_means_plant_variety* condition_tukey.docx")
+
+```
+
+
+```{r mian effect 3, echo=TRUE}
+
+####mian effecr CEVALUATION
+# Get EMMs on the default log scale
+emm_log_scale.4 <- emmeans(model1.GLM, ~ EVALUATION)
+
+
+# Get EMMs on the original response (count) scale
+emm_response_scale.4 <- emmeans(model1.GLM, ~ EVALUATION, type = "response")
+#emmeans(model1.GLM, specs = ~ media * condition)
+#Snippe5
+cld_output.model.4 <- cld(emm_response_scale.4, Letters = LETTERS, alpha = 0.05, 
+                  adjust = "Tukey", # Adjust p-values (Tukey is default for pairwise)
+                  # Use capital letters
+                  sort = TRUE,reversed = T)
+summary(cld_output.model.4)
+print(cld_output.model.4)
+
+cld_output.model.4.2<- flextable::flextable(cld_output.model.4)
+# flextable::save_as_docx(cld_output.model.1.2, path = "pairwise_least_squares_means_plant_variety* condition_tukey.docx")
+
+
+```
+
+```{r interaction effect 1, echo=TRUE}
+####interaction plantvariety * condition
+
+# Get EMMs on the default log scale
+emm_log_scale5 <- emmeans(model1.GLM, ~ plant_variety * condition)
+
+
+# Get EMMs on the original response (count) scale
+emm_response_scale.5 <- emmeans(model1.GLM, ~ plant_variety * condition, type = "response")
+#emmeans(model1.GLM, specs = ~ media * condition)
+#Snippe5
+cld_output.model.5 <- cld(emm_response_scale.1, Letters = LETTERS, alpha = 0.05, 
+                  adjust = "Tukey", # Adjust p-values (Tukey is default for pairwise)
+                  # Use capital letters
+                  sort = TRUE,reversed = T)
+summary(cld_output.model.5)
+print(cld_output.model.5)
+
+cld_output.model.5.2 <- flextable::flextable(cld_output.model.5)
+flextable::save_as_docx(cld_output.model.5.2, path = "pairwise_least_squares_means_plant_variety* condition_tukey.docx")
+
+
+```
+
+
+```{r interaction effect 2, echo=TRUE}
+####interaction plantvariety * fungusID
+
+# Get EMMs on the default log scale
+emm_log_scale.6 <- emmeans(model1.GLM, ~ plant_variety * fungusID)
+
+
+# Get EMMs on the original response (count) scale
+emm_response_scale.6 <- emmeans(model1.GLM, ~ plant_variety * fungusID, type = "response")
+#emmeans(model1.GLM, specs = ~ media * condition)
+#Snippe5
+cld_output.model.6 <- cld(emm_response_scale.6, Letters = LETTERS, alpha = 0.05, 
+                  adjust = "Tukey", # Adjust p-values (Tukey is default for pairwise)
+                  # Use capital letters
+                  sort = TRUE,reversed = T)
+summary(cld_output.model.6)
+print(cld_output.model.6)
+
+cld_output.model.6.2 <- flextable::flextable(cld_output.model.6 )
+flextable::save_as_docx(cld_output.model.6.2, path = "pairwise_least_squares_means_plantvariety*fungusID_tukey.docx")
+
+```
+
+
+```{r interaction effect 3, echo=TRUE}
+##### interaction plantvariety*EVALUATION
+
+# Get EMMs on the default log scale
+emm_log_scale.7 <- emmeans(model1.GLM, ~ plant_variety*EVALUATION)
+
+
+# Get EMMs on the original response (count) scale
+emm_response_scale.7 <- emmeans(model1.GLM, ~ plant_variety*EVALUATION, type = "response")
+#emmeans(model1.GLM, specs = ~ media * condition)
+#Snippe5
+cld_output.model.7 <- cld(emm_response_scale.7, Letters = LETTERS, alpha = 0.05, 
+                  adjust = "Tukey", # Adjust p-values (Tukey is default for pairwise)
+                  # Use capital letters
+                  sort = TRUE,reversed = T)
+summary(cld_output.model.7)
+print(cld_output.model.7)
+
+cld_output.model.7.2<- flextable::flextable(cld_output.model.7)
+ flextable::save_as_docx(cld_output.model.7.2, path = "pairwise_least_squares_means_plantvariety*EVALUATION_tukey.docx")
+
+```
+
