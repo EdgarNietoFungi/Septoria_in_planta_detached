@@ -1,6 +1,2 @@
 # Septoria_detaached_leaves_2025
-# Septoria_detaached_leaves_2025
-# Septoria_in_planta_detached
-# Septoria_in_planta_detached
-# Septoria_in_planta_detached
-# Septoria_in_planta_detached
+
